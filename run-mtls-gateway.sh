@@ -8,9 +8,17 @@ SUPERVISOR_IMAGE="${OPENSHELL_SUPERVISOR_IMAGE:-openshell/supervisor:dev}"
 
 cd "${ROOT}"
 
+# Set up build environment for macOS Homebrew dependencies
+export PROTOC=/opt/homebrew/bin/protoc
+export Z3_SYS_Z3_HEADER=/opt/homebrew/opt/z3/include/z3.h
+# Override .cargo/config.toml BINDGEN_EXTRA_CLANG_ARGS with macOS path
+export BINDGEN_EXTRA_CLANG_ARGS="-I/opt/homebrew/opt/z3/include -I/usr/include/z3"
+export LIBRARY_PATH=/opt/homebrew/opt/z3/lib:${LIBRARY_PATH:-}
+export RUSTFLAGS="-L /opt/homebrew/opt/z3/lib"
 
 echo "Building openshell-gateway..."
-mise run build:gateway
+# Bypass mise task to ensure environment variables are passed to cargo
+cargo build -p openshell-server --bin openshell-gateway
 
 if [[ ! -x "${GATEWAY_BIN}" ]]; then
   echo "ERROR: expected gateway binary at ${GATEWAY_BIN}" >&2
