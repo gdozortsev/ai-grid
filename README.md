@@ -7,13 +7,19 @@
 
 ## Quickstart
 
+Cloning for this first time? Run this to initialize OpenShell:
+```bash
+git submodule update --init --recursive
+```
+
 TERMINAL A:
 Instructions for running in interactive mode:
 ```bash
 #build OpenShell
-mise run build:docker:prebuilt
+cd OpenShell && mise run build:docker:prebuilt
 
 #run Praxis x OpenShell
+cd ..
 ./test-praxis-podman.sh --log-level info -i
 ```
 
