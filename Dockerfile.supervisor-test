@@ -1,0 +1,35 @@
+# Test Dockerfile with Praxis sidecar for External network mode
+# Using Ubuntu 24.04 for GLIBC 2.38+ (required by Praxis binary)
+
+FROM ubuntu:24.04 AS supervisor-test
+
+ARG TARGETARCH
+
+# Install basic utilities for testing and iproute2 for network namespace support
+RUN apt-get update && apt-get install -y \
+    bash \
+    curl \
+    wget \
+    ca-certificates \
+    iproute2 \
+    iptables \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the supervisor binary
+COPY OpenShell/deploy/docker/.build/prebuilt-binaries/${TARGETARCH}/openshell-sandbox /openshell-sandbox
+RUN chmod +x /openshell-sandbox
+
+# Copy prebuilt Linux Praxis binary (glibc-linked)
+COPY praxis_linux_binary /usr/local/bin/praxis
+RUN chmod +x /usr/local/bin/praxis
+
+# Create sandbox user/group (required by policy)
+# Ubuntu 24.04 has UID/GID 1000 already, use 1500 instead
+RUN groupadd -g 1500 sandbox && \
+    useradd -u 1500 -g sandbox -m sandbox
+
+# Wrapper script to start Praxis in background, then supervisor
+COPY /docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+ENTRYPOINT ["/docker-entrypoint.sh"]

@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Praxis POC Policy - External Network Mode
+# This policy delegates network enforcement to an external proxy (Praxis)
+
+version: 1
+
+# Minimal filesystem access for testing
+filesystem_policy:
+  read_only:
+    - /bin
+    - /usr
+    - /lib
+    - /lib64
+  read_write:
+    - /tmp
+  include_workdir: true
+
+# External network mode - delegates to Praxis
+network:
+  mode: external
+  external:
+    proxy_type: praxis
+    control_endpoint: "http://localhost:8080"
+
+# Process settings
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+# Landlock (best effort for compatibility)
+landlock:
+  compatibility: best_effort
