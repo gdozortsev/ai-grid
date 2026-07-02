@@ -10,8 +10,11 @@
 TERMINAL A:
 Instructions for running in interactive mode:
 ```bash
-chmod +x /test-praxis-podman.sh
-./test-praxis-podman.sh --log-level info
+#build OpenShell
+mise run build:docker:prebuilt
+
+#run Praxis x OpenShell
+./test-praxis-podman.sh --log-level info -i
 ```
 
 TERMINAL B:
