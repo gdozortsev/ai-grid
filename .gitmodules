@@ -1,0 +1,4 @@
+[submodule "OpenShell"]
+	path = OpenShell
+	url = https://github.com/gdozortsev/OpenShell.git
+	branch = dev
