@@ -8,14 +8,18 @@ version: 1
 
 # Minimal filesystem access for testing
 filesystem_policy:
+  include_workdir: true
   read_only:
-    - /bin
     - /usr
     - /lib
-    - /lib64
+    - /proc
+    - /dev/urandom
+    - /etc
+    - /var/log
   read_write:
+    - /sandbox
     - /tmp
-  include_workdir: true
+    - /dev/null
 
 # External network mode - delegates to Praxis
 network:

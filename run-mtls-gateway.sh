@@ -4,7 +4,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/OpenShell" && pwd)"
 GATEWAY_BIN="${ROOT}/target/debug/openshell-gateway"
 STATE_DIR="${ROOT}/.cache/gateway-podman-mtls"
 TLS_DIR="${HOME}/.local/state/openshell/tls"
-SUPERVISOR_IMAGE="${OPENSHELL_SUPERVISOR_IMAGE:-openshell/supervisor:dev}"
+# Default to Praxis-enabled supervisor (supports both standard and Praxis modes)
+SUPERVISOR_IMAGE="${OPENSHELL_SUPERVISOR_IMAGE:-localhost/openshell/supervisor:praxis-test}"
 
 cd "${ROOT}"
 
@@ -20,43 +21,12 @@ echo "Building openshell-gateway..."
 # Bypass mise task to ensure environment variables are passed to cargo
 cargo build -p openshell-server --bin openshell-gateway
 
-if [[ ! -x "${GATEWAY_BIN}" ]]; then
-  echo "ERROR: expected gateway binary at ${GATEWAY_BIN}" >&2
-  exit 1
-fi
-
-# Check if TLS certificates exist
-if [[ ! -f "${TLS_DIR}/ca.crt" ]]; then
-  echo "ERROR: TLS certificates not found at ${TLS_DIR}" >&2
-  echo "Generate them first with:" >&2
-  echo "  ./target/debug/openshell-gateway generate-certs --output-dir ~/.local/state/openshell/tls" >&2
-  exit 1
-fi
-
-# Ensure Podman service is running
-if ! command -v podman >/dev/null 2>&1; then
-  echo "ERROR: podman is not installed or not in PATH" >&2
-  exit 1
-fi
-
-if ! podman info >/dev/null 2>&1; then
-  echo "ERROR: podman service is not reachable. Start it with:" >&2
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    echo "  podman machine start" >&2
-  else
-    echo "  systemctl --user start podman.socket" >&2
-  fi
-  exit 1
-fi
-
-# Ensure supervisor image exists
-if ! podman image exists "${SUPERVISOR_IMAGE}" >/dev/null 2>&1; then
-  echo "Building Podman supervisor sideload image (${SUPERVISOR_IMAGE})..."
-  CONTAINER_ENGINE=podman IMAGE_TAG=dev mise run build:docker:supervisor
-fi
-
 # Create state directory and config
 mkdir -p "${STATE_DIR}"
+
+# Allow overriding supervisor image via env var for Praxis testing
+SUPERVISOR_IMAGE_OVERRIDE="${OPENSHELL_SUPERVISOR_IMAGE_OVERRIDE:-${SUPERVISOR_IMAGE}}"
+
 cat > "${STATE_DIR}/gateway.toml" <<EOF
 [openshell]
 version = 1
@@ -64,7 +34,7 @@ version = 1
 [openshell.gateway]
 compute_drivers = ["podman"]
 default_image = "ghcr.io/nvidia/openshell-community/sandboxes/base:latest"
-supervisor_image = "${SUPERVISOR_IMAGE}"
+supervisor_image = "${SUPERVISOR_IMAGE_OVERRIDE}"
 
 [openshell.drivers.podman]
 image_pull_policy = "missing"

@@ -15,9 +15,9 @@ RUN apt-get update && apt-get install -y \
     iptables \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the supervisor binary
-COPY OpenShell/deploy/docker/.build/prebuilt-binaries/${TARGETARCH}/openshell-sandbox /openshell-sandbox
-RUN chmod +x /openshell-sandbox
+# Copy the supervisor binary (renamed so our wrapper can call it)
+COPY OpenShell/deploy/docker/.build/prebuilt-binaries/${TARGETARCH}/openshell-sandbox /openshell-sandbox.real
+RUN chmod +x /openshell-sandbox.real
 
 # Copy prebuilt Linux Praxis binary (glibc-linked)
 COPY praxis_linux_binary /usr/local/bin/praxis
@@ -28,8 +28,20 @@ RUN chmod +x /usr/local/bin/praxis
 RUN groupadd -g 1500 sandbox && \
     useradd -u 1500 -g sandbox -m sandbox
 
-# Wrapper script to start Praxis in background, then supervisor
-COPY /docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+# Create /sandbox directory with proper ownership (matches OpenShell base image)
+RUN mkdir -p /sandbox && chown -R sandbox:sandbox /sandbox
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+# Copy the policy files with external network mode into the image
+COPY praxis-poc-policy.yaml /etc/openshell-praxis-policy.yaml
+COPY OpenShell/crates/openshell-supervisor-network/data/sandbox-policy.rego /etc/openshell-praxis-policy.rego
+
+# Wrapper script to start Praxis in background, then supervisor
+# This becomes /openshell-sandbox so the gateway calls it as the entrypoint
+COPY /docker-entrypoint.sh /openshell-sandbox
+RUN chmod +x /openshell-sandbox
+
+# Set working directory to /sandbox
+WORKDIR /sandbox
+
+# Keep entrypoint as the renamed binary for backward compat with standalone runs
+ENTRYPOINT ["/openshell-sandbox"]
