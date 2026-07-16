@@ -13,7 +13,6 @@ PRAXIS_ENDPOINT="${OPENSHELL_PRAXIS_ENDPOINT:-http://host.containers.internal:80
 POLICY_DATA="${OPENSHELL_POLICY_DATA:-${SCRIPT_DIR}/praxis-poc-policy.yaml}"
 LOG_LEVEL="${OPENSHELL_LOG_LEVEL:-info}"
 SANDBOX_NAME="${OPENSHELL_SANDBOX_NAME:-praxis-test-$(date +%s)}"
-KEEP_SANDBOX="${KEEP:-yes}"
 
 
 
@@ -26,9 +25,11 @@ CLI_ARGS=(
     "--policy" "${POLICY_DATA}"
 )
 
-if [[ "${KEEP_SANDBOX}" == "yes" ]]; then
-    CLI_ARGS+=("--keep")
-fi
+# Match the behavior of normal `openshell sandbox create`:
+# - Sandboxes are kept by default (deprecated --keep flag is a no-op)
+# - Only --no-keep deletes the sandbox after exit
+# Since we want to keep the sandbox, we don't add --no-keep
+# (the default behavior is already to keep)
 
 "${OPENSHELL_CLI}" "${CLI_ARGS[@]}"
 EXIT_CODE=$?

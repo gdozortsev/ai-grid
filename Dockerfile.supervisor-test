@@ -1,19 +1,24 @@
 # Test Dockerfile with Praxis sidecar for External network mode
-# Using Ubuntu 24.04 for GLIBC 2.38+ (required by Praxis binary)
+# Based on OpenShell community base image
 
-FROM ubuntu:24.04 AS supervisor-test
+FROM ghcr.io/nvidia/openshell-community/sandboxes/base:latest AS supervisor-test
 
 ARG TARGETARCH
 
-# Install basic utilities for testing and iproute2 for network namespace support
-RUN apt-get update && apt-get install -y \
-    bash \
-    curl \
-    wget \
-    ca-certificates \
-    iproute2 \
-    iptables \
-    && rm -rf /var/lib/apt/lists/*
+# Force the build context to run as root so we can modify system users and files
+USER root
+
+# Install socat for DNS forwarding from sandbox netns to Podman DNS
+RUN apt-get update && apt-get install -y --no-install-recommends socat && rm -rf /var/lib/apt/lists/*
+
+# Add /sbin and /usr/sbin to PATH so iptables can be found by nsenter
+ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/sandbox/.venv/bin"
+
+# Safely update the existing sandbox user/group to UID/GID 1500
+# by directly modifying system files (bypassing groupmod/usermod locks)
+RUN sed -i 's/^sandbox:x:[0-9]\+:/sandbox:x:1500:/' /etc/group && \
+    sed -i 's/^sandbox:x:[0-9]\+:[0-9]\+:/sandbox:x:1500:1500:/' /etc/passwd && \
+    chown -R 1500:1500 /sandbox
 
 # Copy the supervisor binary (renamed so our wrapper can call it)
 COPY OpenShell/deploy/docker/.build/prebuilt-binaries/${TARGETARCH}/openshell-sandbox /openshell-sandbox.real
@@ -23,25 +28,20 @@ RUN chmod +x /openshell-sandbox.real
 COPY praxis_linux_binary /usr/local/bin/praxis
 RUN chmod +x /usr/local/bin/praxis
 
-# Create sandbox user/group (required by policy)
-# Ubuntu 24.04 has UID/GID 1000 already, use 1500 instead
-RUN groupadd -g 1500 sandbox && \
-    useradd -u 1500 -g sandbox -m sandbox
-
-# Create /sandbox directory with proper ownership (matches OpenShell base image)
-RUN mkdir -p /sandbox && chown -R sandbox:sandbox /sandbox
-
 # Copy the policy files with external network mode into the image
 COPY praxis-poc-policy.yaml /etc/openshell-praxis-policy.yaml
 COPY OpenShell/crates/openshell-supervisor-network/data/sandbox-policy.rego /etc/openshell-praxis-policy.rego
 
 # Wrapper script to start Praxis in background, then supervisor
-# This becomes /openshell-sandbox so the gateway calls it as the entrypoint
-COPY /docker-entrypoint.sh /openshell-sandbox
+COPY docker-entrypoint.sh /openshell-sandbox
 RUN chmod +x /openshell-sandbox
 
-# Set working directory to /sandbox
+# Set working directory to /sandbox (community base uses this too)
 WORKDIR /sandbox
+
+# We keep the final runtime user as root so the supervisor can handle 
+# iptables and network namespace setups before dropping its own privileges.
+USER root
 
 # Keep entrypoint as the renamed binary for backward compat with standalone runs
 ENTRYPOINT ["/openshell-sandbox"]

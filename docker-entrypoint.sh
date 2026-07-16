@@ -25,50 +25,54 @@ if [[ "${USE_PRAXIS_MODE}" == "true" ]]; then
     echo "[docker-entrypoint] Starting Praxis sidecar on 0.0.0.0:8080 as sandbox user..."
     echo "[docker-entrypoint] Using Praxis binary: ${PRAXIS_IN_BASE}"
 
-    # Create Praxis config that binds to 0.0.0.0
+    # Create Praxis config for Claude CLI egress proxy
+    # Uses SNI-based TCP routing to forward iptables-redirected TLS traffic
+    # to the correct upstream without TLS termination.
     cat > /etc/praxis-config.yaml <<'EOF'
-admin:
-  address: "127.0.0.1:9901"
-
 listeners:
-  - name: default
+  - name: egress
     address: "0.0.0.0:8080"
-    filter_chains:
-      - default-response
+    protocol: tcp
+    filter_chains: [claude-egress]
 
 filter_chains:
-  - name: default-response
+  - name: claude-egress
     filters:
-      - filter: static_response
-        status: 200
-        headers:
-          - name: Content-Type
-            value: application/json
-        body: '{"status": "ok", "server": "praxis-sidecar"}'
-        conditions:
-          - when:
-              path: "/"
-      - filter: static_response
-        status: 404
-        headers:
-          - name: Content-Type
-            value: application/json
-        body: '{"error": "not found"}'
+      - filter: sni_router
+        routes:
+          - server_names: ["api.anthropic.com"]
+            upstream: "api.anthropic.com:443"
+          - server_names: ["statsig.anthropic.com"]
+            upstream: "statsig.anthropic.com:443"
+          - server_names: ["*.anthropic.com"]
+            upstream: "api.anthropic.com:443"
+        default_upstream: "api.anthropic.com:443"
+      - filter: tcp_access_log
 EOF
 
     echo "[docker-entrypoint] Spawning Praxis process..."
     su -s /bin/bash sandbox -c "RUST_LOG=praxis=debug,praxis_protocol=debug ${PRAXIS_IN_BASE} --config /etc/praxis-config.yaml > /tmp/praxis.log 2>&1 &"
 
-    # Wait for Praxis to be ready
+    # Wait for Praxis to be ready (TCP listener, so check with netcat)
     echo "[docker-entrypoint] Waiting for Praxis to be ready..."
     for i in {1..5}; do
-        if curl -s http://127.0.0.1:8080/ > /dev/null 2>&1; then
+        if nc -z 127.0.0.1 8080 2>/dev/null; then
             echo "[docker-entrypoint] Praxis sidecar ready on 0.0.0.0:8080 ✓"
             break
         fi
         echo "[docker-entrypoint] Waiting for Praxis (attempt $i/5)..."
         sleep 1
     done
+fi
+
+# Start DNS forwarder so the sandbox netns can resolve hostnames.
+# The sandbox netns has iptables DNAT rules redirecting port 53 to the veth
+# host side (10.200.0.1:53). socat forwards those queries to the Podman DNS.
+if [[ "${USE_PRAXIS_MODE}" == "true" ]]; then
+    PODMAN_DNS=$(awk '/^nameserver/{print $2; exit}' /etc/resolv.conf)
+    echo "[docker-entrypoint] Starting DNS forwarder (UDP+TCP) on :5353 → ${PODMAN_DNS}:53"
+    socat UDP4-LISTEN:5353,fork,reuseaddr UDP4:${PODMAN_DNS}:53 &
+    socat TCP4-LISTEN:5353,fork,reuseaddr TCP4:${PODMAN_DNS}:53 &
 fi
 
 # Run supervisor as root (needs privileges for netns/iptables)
