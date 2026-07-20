@@ -1,0 +1,26 @@
+listeners:
+  - name: egress
+    address: "0.0.0.0:8080"
+    protocol: tcp
+    filter_chains: [claude-egress]
+
+filter_chains:
+  - name: claude-egress
+    filters:
+      - filter: sni_router
+        routes:
+          - server_names: ["api.anthropic.com"]
+            upstream: "api.anthropic.com:443"
+          - server_names: ["statsig.anthropic.com"]
+            upstream: "statsig.anthropic.com:443"
+          - server_names: ["*.anthropic.com"]
+            upstream: "api.anthropic.com:443"
+          - server_names: ["downloads.claude.ai"]
+            upstream: "downloads.claude.ai:443"
+          - server_names: ["*.claude.ai"]
+            upstream: "downloads.claude.ai:443"
+          - server_names: ["oauth2.googleapis.com"]
+            upstream: "oauth2.googleapis.com:443"
+          - server_names: ["aiplatform.googleapis.com"]
+            upstream: "aiplatform.googleapis.com:443"
+      - filter: tcp_access_log

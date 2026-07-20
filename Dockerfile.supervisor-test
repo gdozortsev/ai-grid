@@ -28,6 +28,9 @@ RUN chmod +x /openshell-sandbox.real
 COPY praxis_linux_binary /usr/local/bin/praxis
 RUN chmod +x /usr/local/bin/praxis
 
+# Copy Praxis proxy config (SNI routes for egress)
+COPY praxis-config.yaml /etc/praxis-config.yaml
+
 # Copy the policy files with external network mode into the image
 COPY praxis-poc-policy.yaml /etc/openshell-praxis-policy.yaml
 COPY OpenShell/crates/openshell-supervisor-network/data/sandbox-policy.rego /etc/openshell-praxis-policy.rego

@@ -25,31 +25,6 @@ if [[ "${USE_PRAXIS_MODE}" == "true" ]]; then
     echo "[docker-entrypoint] Starting Praxis sidecar on 0.0.0.0:8080 as sandbox user..."
     echo "[docker-entrypoint] Using Praxis binary: ${PRAXIS_IN_BASE}"
 
-    # Create Praxis config for Claude CLI egress proxy
-    # Uses SNI-based TCP routing to forward iptables-redirected TLS traffic
-    # to the correct upstream without TLS termination.
-    cat > /etc/praxis-config.yaml <<'EOF'
-listeners:
-  - name: egress
-    address: "0.0.0.0:8080"
-    protocol: tcp
-    filter_chains: [claude-egress]
-
-filter_chains:
-  - name: claude-egress
-    filters:
-      - filter: sni_router
-        routes:
-          - server_names: ["api.anthropic.com"]
-            upstream: "api.anthropic.com:443"
-          - server_names: ["statsig.anthropic.com"]
-            upstream: "statsig.anthropic.com:443"
-          - server_names: ["*.anthropic.com"]
-            upstream: "api.anthropic.com:443"
-        default_upstream: "api.anthropic.com:443"
-      - filter: tcp_access_log
-EOF
-
     echo "[docker-entrypoint] Spawning Praxis process..."
     su -s /bin/bash sandbox -c "RUST_LOG=praxis=debug,praxis_protocol=debug ${PRAXIS_IN_BASE} --config /etc/praxis-config.yaml > /tmp/praxis.log 2>&1 &"
 
