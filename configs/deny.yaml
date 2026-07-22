@@ -1,0 +1,40 @@
+# Deny-All Default — Praxis egress filter for OpenShell sandbox
+#
+# Every outbound connection from the sandbox netns is routed through
+# this Praxis listener. The sni_router has a single unreachable
+# sentinel route and NO default_upstream. Any real SNI hostname
+# fails to match and is rejected (HTTP 421). Non-TLS (plain TCP)
+# connections with no SNI are also rejected.
+#
+# Test matrix:
+#
+#   Claude inference (opening up claude cli)
+#     → SNI "api.anthropic.com", "platform.claude.com", etc. matches no route → REJECTED 421
+#
+#   MCP (JSON-RPC tools/list → any MCP server)
+#   for example: curl -X POST https://registry.mcphub.io/mcp \
+#    -H "Content-Type: application/json" \
+#    -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+#
+#     → SNI for MCP host matches no route → REJECTED 421
+#
+#   External HTTP (curl https://example.com)
+#     → SNI "example.com" matches no route → REJECTED 421
+#
+# No backend receives traffic.
+
+listeners:
+  - name: egress
+    address: "0.0.0.0:8080"
+    protocol: tcp
+    filter_chains: [deny-all]
+
+filter_chains:
+  - name: deny-all
+    filters:
+      - filter: sni_router
+        #sni-router requires one path, so put an invalid path
+        routes:
+          - server_names: ["deny-all.invalid"]
+            upstream: "192.0.2.1:1"
+      - filter: tcp_access_log

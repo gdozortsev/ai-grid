@@ -27,9 +27,12 @@ export RUSTFLAGS="-L /opt/homebrew/opt/z3/lib"
 # 2. compile the CLI
 cargo build -p openshell-cli
 
-#Build the Praxis supervisor image:
+#Build the Praxis supervisor image (with default deny config):
 cd ..
-podman build -f Dockerfile.supervisor-test --build-arg TARGETARCH=arm64 -t localhost/openshell/supervisor:praxis-test .
+podman build -f Dockerfile.supervisor-test -t localhost/openshell/supervisor:praxis-test .
+
+#or, pass in your own config for Praxis:
+podman build -f Dockerfile.supervisor-test --build-arg PRAXIS_CONFIG=/PATH/TO/CONFIG -t localhost/openshell/supervisor:praxis-test .
 
 #Start the gateway
 ./run-mtls-gateway.sh
